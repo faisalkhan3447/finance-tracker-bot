@@ -2,7 +2,6 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db from '../database/db.js';
 import { formatINR, formatUSD } from '../utils/currency.js';
 import { logger } from '../utils/logger.js';
-import { writeToString } from 'csv-writer/src/lib/csv-stringifier-factory.js'; 
 
 export default {
   data: new SlashCommandBuilder()
