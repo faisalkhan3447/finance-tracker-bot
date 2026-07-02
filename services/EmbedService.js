@@ -33,14 +33,24 @@ class EmbedService {
     if (lastTx) {
       const sign = lastTx.type === 'INCOME' ? '+' : '-';
       const formattedAmount = lastTx.original_currency === 'USD' ? formatUSD(lastTx.original_amount) : formatINR(lastTx.original_amount);
-      lastTxString = `${sign}${formattedAmount}\n${lastTx.reason}`;
+      lastTxString = `${sign}${formattedAmount} - ${lastTx.reason}`;
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#2F3136')
+      .setColor('#5865F2')
       .setTitle('💰 Finance Dashboard')
-      .setDescription(`━━━━━━━━━━━━━━━━━━━━━━━\n**Current Balance**\n${formatINR(balanceInr)}\n${formatUSD(balanceUsd)}\n━━━━━━━━━━━━━━━━━━━━━━━\n📈 **Today's Income**\n${formatINR(todayIncome)}\n📉 **Today's Expenses**\n${formatINR(todayExpense)}\n━━━━━━━━━━━━━━━━━━━━━━━\n💱 **Exchange Rate**\n$1 = ${formatINR(exchangeRate)}\n━━━━━━━━━━━━━━━━━━━━━━━\n🕒 **Last Transaction**\n${lastTxString}\n━━━━━━━━━━━━━━━━━━━━━━━`)
-      .setFooter({ text: `Finance Tracker v1.0.0 | ${txCount} Transactions | Updated` })
+      .setDescription('Live synchronized financial status.')
+      .addFields(
+        { name: 'Current Balance (INR)', value: `**${formatINR(balanceInr)}**`, inline: true },
+        { name: 'Current Balance (USD)', value: `**${formatUSD(balanceUsd)}**`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true },
+        { name: '📈 Today\'s Income', value: formatINR(todayIncome), inline: true },
+        { name: '📉 Today\'s Expenses', value: formatINR(todayExpense), inline: true },
+        { name: '\u200B', value: '\u200B', inline: true },
+        { name: '💱 Exchange Rate', value: `$1 = ${formatINR(exchangeRate)}`, inline: true },
+        { name: '🕒 Last Transaction', value: lastTxString, inline: false }
+      )
+      .setFooter({ text: `v1.0.0 | ${txCount} Transactions` })
       .setTimestamp(new Date());
 
     return embed;
@@ -69,7 +79,7 @@ class EmbedService {
       .setTitle(title)
       .addFields(
         { name: 'Transaction ID', value: tx.tx_id, inline: true },
-        { name: 'User', value: `<@${tx.user_id}> (${tx.username})`, inline: true },
+        { name: 'User', value: `<@${tx.user_id}>`, inline: true },
         { name: 'Type', value: tx.type, inline: true },
         { name: 'Original Amount', value: tx.original_currency === 'USD' ? formatUSD(tx.original_amount) : formatINR(tx.original_amount), inline: true },
         { name: 'Converted Amount', value: formatINR(tx.converted_inr), inline: true },

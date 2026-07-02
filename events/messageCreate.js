@@ -36,20 +36,24 @@ export default {
       const embed = new EmbedBuilder()
         .setColor(tx.type === 'INCOME' ? '#00FF00' : '#FF0000')
         .setTitle(`✅ ${tx.type === 'INCOME' ? 'Income' : 'Expense'} Recorded`)
-        .setDescription(`
-**Amount:** ${tx.type === 'INCOME' ? '+' : '-'}${parsed.currency === 'USD' ? formatUSD(parsed.amount) : formatINR(parsed.amount)}
-**Converted:** ${formatINR(tx.converted_inr)}
-**Reason:** ${tx.reason}
-━━━━━━━━━━━━━━━━━━━━━━
-**Current Balance**
-${formatINR(currentBalanceInr)}
-${formatUSD(currentBalanceUsd)}
-        `)
-        .setFooter({ text: `TX ID: ${tx.tx_id}` });
+        .setDescription(`**Amount:** ${tx.type === 'INCOME' ? '+' : '-'}${parsed.currency === 'USD' ? formatUSD(parsed.amount) : formatINR(parsed.amount)}\n**Converted:** ${formatINR(tx.converted_inr)}\n**Reason:** ${tx.reason}\n\n**Current Balance**\n${formatINR(currentBalanceInr)}\n${formatUSD(currentBalanceUsd)}`)
+        .setFooter({ text: `TX ID: ${tx.tx_id} | Logged by ${message.author.username}` });
 
-      const reply = await message.reply({ embeds: [embed] });
-      
-      setTimeout(() => reply.delete().catch(() => {}), 8000);
+      await message.react('✅').catch(() => {});
+
+      const logChannelId = db.getConfig('transactionlog_channel');
+      if (logChannelId) {
+        const logChannel = await message.client.channels.fetch(logChannelId).catch(() => null);
+        if (logChannel) {
+          await logChannel.send({ embeds: [embed] });
+        } else {
+          const reply = await message.reply({ embeds: [embed] });
+          setTimeout(() => reply.delete().catch(() => {}), 15000);
+        }
+      } else {
+        const reply = await message.reply({ embeds: [embed] });
+        setTimeout(() => reply.delete().catch(() => {}), 15000);
+      }
 
       const previousBalanceInr = currentBalanceInr - tx.converted_inr;
       await NotificationService.dispatchAuditLog('ADDED', tx, previousBalanceInr);
@@ -65,7 +69,7 @@ ${formatUSD(currentBalanceUsd)}
         .setDescription(error.message || 'An unknown error occurred while saving the transaction.');
         
       const reply = await message.reply({ embeds: [embed] });
-      setTimeout(() => reply.delete().catch(() => {}), 8000);
+      setTimeout(() => reply.delete().catch(() => {}), 10000);
     }
   }
 };
