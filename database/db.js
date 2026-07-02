@@ -1,9 +1,8 @@
-import Database from 'better-sqlite3';
-import path from 'path';
 import fs from 'fs';
+import path from 'path';
 import { logger } from '../utils/logger.js';
 
-const DB_PATH = path.join(process.cwd(), 'database', 'finance.sqlite');
+const DB_PATH = path.join(process.cwd(), 'database', 'data.json');
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
 
 if (!fs.existsSync(path.dirname(DB_PATH))) {
@@ -13,76 +12,67 @@ if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
-let db;
-
-try {
-  db = new Database(DB_PATH, { verbose: (msg) => logger.debug(msg) });
-  db.pragma('journal_mode = WAL');
-  logger.info('Connected to SQLite database.');
-} catch (error) {
-  logger.error('Failed to connect to SQLite database:', error);
-  process.exit(1);
-}
-
-// Migrations and initial schema
-const initSchema = () => {
-  const createSchemaVersionTable = `
-    CREATE TABLE IF NOT EXISTS schema_version (
-      version INTEGER PRIMARY KEY
-    )
-  `;
-  db.prepare(createSchemaVersionTable).run();
-
-  const getVersion = db.prepare('SELECT MAX(version) as version FROM schema_version').get();
-  const currentVersion = getVersion?.version || 0;
-
-  if (currentVersion < 1) {
-    logger.info('Migrating database to version 1...');
-    const migrationTx = db.transaction(() => {
-      db.prepare(`
-        CREATE TABLE IF NOT EXISTS configuration (
-          key TEXT PRIMARY KEY,
-          value TEXT
-        )
-      `).run();
-
-      db.prepare(`
-        CREATE TABLE IF NOT EXISTS transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          tx_id TEXT UNIQUE,
-          message_id TEXT,
-          user_id TEXT,
-          username TEXT,
-          type TEXT,
-          original_amount REAL,
-          original_currency TEXT,
-          converted_inr REAL,
-          balance_after REAL,
-          reason TEXT,
-          is_deleted INTEGER DEFAULT 0,
-          timestamp INTEGER
-        )
-      `).run();
-
-      // Set default config
-      db.prepare('INSERT OR IGNORE INTO configuration (key, value) VALUES (?, ?)').run('exchange_rate', '82.00');
-      db.prepare('INSERT OR IGNORE INTO configuration (key, value) VALUES (?, ?)').run('balance_inr', '0');
-      db.prepare('INSERT OR IGNORE INTO configuration (key, value) VALUES (?, ?)').run('allow_negative_balance', 'false');
-
-      db.prepare('INSERT INTO schema_version (version) VALUES (1)').run();
-    });
-
-    migrationTx();
-    logger.info('Migration to version 1 complete.');
-  }
+const defaultData = {
+  configuration: {
+    exchange_rate: '82.00',
+    balance_inr: '0',
+    allow_negative_balance: 'false'
+  },
+  transactions: []
 };
 
-initSchema();
+class JSONDatabase {
+  constructor() {
+    this.data = defaultData;
+    this.load();
+  }
 
-// Helper to run atomic transactions
+  load() {
+    try {
+      if (fs.existsSync(DB_PATH)) {
+        const fileContent = fs.readFileSync(DB_PATH, 'utf-8');
+        this.data = JSON.parse(fileContent);
+        if (!this.data.configuration) this.data.configuration = defaultData.configuration;
+        if (!this.data.transactions) this.data.transactions = [];
+      } else {
+        this.save();
+      }
+      logger.info('Connected to JSON database.');
+    } catch (error) {
+      logger.error('Failed to load JSON database:', error);
+      process.exit(1);
+    }
+  }
+
+  save() {
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf-8');
+    } catch (error) {
+      logger.error('Failed to save JSON database:', error);
+    }
+  }
+
+  getConfig(key, defaultValue) {
+    return this.data.configuration[key] !== undefined ? this.data.configuration[key] : defaultValue;
+  }
+
+  setConfig(key, value) {
+    this.data.configuration[key] = value;
+    this.save();
+  }
+}
+
+const db = new JSONDatabase();
+
 export const executeTransaction = (cb) => {
-  const tx = db.transaction(cb);
-  return tx();
+  try {
+    const result = cb();
+    db.save(); 
+    return result;
+  } catch (error) {
+    db.load();
+    throw error;
+  }
 };
 
 export default db;

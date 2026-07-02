@@ -1,38 +1,34 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import db from '../database/db.js';
 import { formatINR, formatUSD } from '../utils/currency.js';
-import { logger } from '../utils/logger.js';
 
 class EmbedService {
-  /**
-   * Generates the main Balance Dashboard embed.
-   * 
-   * @returns {EmbedBuilder}
-   */
   generateDashboardEmbed() {
-    const exchangeRate = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'exchange_rate'").get()?.value || '82.00');
-    const balanceInr = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+    const exchangeRate = parseFloat(db.getConfig('exchange_rate', '82.00'));
+    const balanceInr = parseFloat(db.getConfig('balance_inr', '0'));
     const balanceUsd = balanceInr / exchangeRate;
     
-    // Calculate today's activity
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const startTimestamp = startOfDay.getTime();
     
-    const todaysTransactions = db.prepare('SELECT type, converted_inr FROM transactions WHERE is_deleted = 0 AND timestamp >= ?').all(startTimestamp);
     let todayIncome = 0;
     let todayExpense = 0;
-    
-    for (const tx of todaysTransactions) {
-      if (tx.type === 'INCOME') todayIncome += tx.converted_inr;
-      else todayExpense += tx.converted_inr;
+    let txCount = 0;
+    let lastTx = null;
+
+    for (const tx of db.data.transactions) {
+      if (tx.is_deleted === 0) {
+        txCount++;
+        lastTx = tx; 
+        
+        if (tx.timestamp >= startTimestamp) {
+          if (tx.type === 'INCOME') todayIncome += tx.converted_inr;
+          else todayExpense += tx.converted_inr;
+        }
+      }
     }
 
-    // Get total transactions count
-    const txCount = db.prepare('SELECT COUNT(*) as count FROM transactions WHERE is_deleted = 0').get().count;
-    
-    // Get last transaction
-    const lastTx = db.prepare('SELECT * FROM transactions WHERE is_deleted = 0 ORDER BY id DESC LIMIT 1').get();
     let lastTxString = 'No transactions yet.';
     if (lastTx) {
       const sign = lastTx.type === 'INCOME' ? '+' : '-';
@@ -50,29 +46,21 @@ class EmbedService {
     return embed;
   }
 
-  /**
-   * Generates the Audit Log embed for a transaction action.
-   * 
-   * @param {string} action - Action type ('ADDED', 'UPDATED', 'DELETED', 'RESTORED', 'UNDONE')
-   * @param {Object} tx - The transaction object
-   * @param {number} previousBalanceInr - The balance prior to this action
-   * @returns {Object} { embeds: [EmbedBuilder], components: [ActionRowBuilder] }
-   */
   generateAuditLog(action, tx, previousBalanceInr) {
-    let color = '#5865F2'; // Blurple default
+    let color = '#5865F2'; 
     let title = 'Transaction Audit';
     
     if (action === 'ADDED') {
       color = tx.type === 'INCOME' ? '#00FF00' : '#FF0000';
       title = `💰 Transaction Added`;
     } else if (action === 'DELETED' || action === 'UNDONE') {
-      color = '#ED4245'; // Red
+      color = '#ED4245'; 
       title = `🗑️ Transaction ${action === 'UNDONE' ? 'Undone' : 'Deleted'}`;
     } else if (action === 'RESTORED') {
-      color = '#57F287'; // Green
+      color = '#57F287'; 
       title = `♻️ Transaction Restored`;
     } else if (action === 'UPDATED') {
-      color = '#FEE75C'; // Yellow
+      color = '#FEE75C'; 
       title = `✏️ Transaction Updated`;
     }
 
