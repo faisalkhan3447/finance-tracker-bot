@@ -1,5 +1,6 @@
 import { Events } from 'discord.js';
 import { logger } from '../utils/logger.js';
+import db from '../database/db.js';
 
 export default {
   name: Events.ClientReady,
@@ -7,13 +8,10 @@ export default {
   async execute(client) {
     logger.info(`Ready! Logged in as ${client.user.tag}`);
     
-    // Set bot presence
     setInterval(async () => {
       try {
-        const db = (await import('../database/db.js')).default;
-        const txCount = db.prepare('SELECT COUNT(*) as count FROM transactions WHERE is_deleted = 0').get().count;
-        const balanceRow = db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get();
-        const balance = balanceRow ? parseFloat(balanceRow.value) : 0;
+        const txCount = db.data.transactions.filter(t => t.is_deleted === 0).length;
+        const balance = parseFloat(db.getConfig('balance_inr', '0'));
         
         const { formatINR } = await import('../utils/currency.js');
         
@@ -23,7 +21,6 @@ export default {
       }
     }, 60000);
 
-    // Initial presence set
     client.emit('updatePresence'); 
   }
 };

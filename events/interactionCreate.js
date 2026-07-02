@@ -29,19 +29,15 @@ export default {
     } else if (interaction.isButton()) {
       await handleButtonInteraction(interaction);
     }
-    // Note: ModalSubmit and StringSelectMenu handling for setup will go here if needed.
   }
 };
 
-/**
- * Handles interactions originating from buttons on the Audit Logs.
- */
 async function handleButtonInteraction(interaction) {
   const { customId } = interaction;
 
   if (customId.startsWith('view_')) {
     const txId = customId.split('_')[1];
-    const tx = db.prepare('SELECT * FROM transactions WHERE tx_id = ?').get(txId);
+    const tx = db.data.transactions.find(t => t.tx_id === txId);
     
     if (!tx) {
       return interaction.reply({ content: 'Transaction not found.', ephemeral: true });
@@ -54,7 +50,6 @@ async function handleButtonInteraction(interaction) {
     });
   }
 
-  // Admin checks for Undo/Restore
   const isAdmin = interaction.member.permissions.has('Administrator');
   if (!isAdmin) {
     return interaction.reply({ content: 'You do not have permission to use this button.', ephemeral: true });
@@ -65,7 +60,7 @@ async function handleButtonInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true });
       const txId = customId.split('_')[1];
       
-      const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+      const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
       const deletedTx = await TransactionService.deleteTransaction(txId, 'tx_id');
       
       await NotificationService.dispatchAuditLog('UNDONE', deletedTx, oldBalance);
@@ -77,7 +72,7 @@ async function handleButtonInteraction(interaction) {
       await interaction.deferReply({ ephemeral: true });
       const txId = customId.split('_')[1];
       
-      const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+      const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
       const restoredTx = await TransactionService.restoreTransaction(txId);
       
       await NotificationService.dispatchAuditLog('RESTORED', restoredTx, oldBalance);

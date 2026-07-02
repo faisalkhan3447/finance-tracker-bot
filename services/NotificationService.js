@@ -5,7 +5,6 @@ import { logger } from '../utils/logger.js';
 
 class NotificationService {
   constructor() {
-    /** @type {Client|null} */
     this.client = null;
   }
 
@@ -13,24 +12,18 @@ class NotificationService {
     this.client = client;
   }
 
-  /**
-   * Refreshes the Balance Dashboard message in the configured balance channel.
-   * If the message was deleted or cannot be edited, a new one is created.
-   * 
-   * @returns {Promise<void>}
-   */
   async refreshDashboard() {
     if (!this.client) return;
 
     try {
-      const channelId = db.prepare("SELECT value FROM configuration WHERE key = 'balance_channel'").get()?.value;
+      const channelId = db.getConfig('balance_channel');
       if (!channelId) return;
 
       const channel = await this.client.channels.fetch(channelId).catch(() => null);
       if (!channel || !(channel instanceof TextChannel)) return;
 
       const embed = EmbedService.generateDashboardEmbed();
-      const existingMessageId = db.prepare("SELECT value FROM configuration WHERE key = 'balance_message_id'").get()?.value;
+      const existingMessageId = db.getConfig('balance_message_id');
 
       let messageUpdated = false;
 
@@ -46,26 +39,18 @@ class NotificationService {
 
       if (!messageUpdated) {
         const newMessage = await channel.send({ embeds: [embed] });
-        db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('balance_message_id', newMessage.id);
+        db.setConfig('balance_message_id', newMessage.id);
       }
     } catch (error) {
       logger.error('Failed to refresh dashboard:', error);
     }
   }
 
-  /**
-   * Sends an Audit Log for a transaction action.
-   * 
-   * @param {string} action - 'ADDED', 'UPDATED', 'DELETED', 'RESTORED', 'UNDONE'
-   * @param {Object} tx - The transaction object from DB
-   * @param {number} previousBalanceInr - The balance prior to this action
-   * @returns {Promise<void>}
-   */
   async dispatchAuditLog(action, tx, previousBalanceInr) {
     if (!this.client) return;
 
     try {
-      const channelId = db.prepare("SELECT value FROM configuration WHERE key = 'audit_channel'").get()?.value;
+      const channelId = db.getConfig('audit_channel');
       if (!channelId) return;
 
       const channel = await this.client.channels.fetch(channelId).catch(() => null);

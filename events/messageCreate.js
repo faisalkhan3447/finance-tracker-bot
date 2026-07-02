@@ -10,12 +10,11 @@ export default {
   async execute(message) {
     if (message.author.bot || !message.guild) return;
 
-    // Check if this is the transaction channel
-    const txChannelId = db.prepare("SELECT value FROM configuration WHERE key = 'transaction_channel'").get()?.value;
+    const txChannelId = db.getConfig('transaction_channel');
     if (!txChannelId || message.channel.id !== txChannelId) return;
 
     const parsed = parseTransactionMessage(message.content);
-    if (!parsed) return; // Not a valid transaction message, ignore it
+    if (!parsed) return; 
 
     try {
       const tx = await TransactionService.createTransaction({
@@ -28,11 +27,9 @@ export default {
         reason: parsed.reason
       });
 
-      // Send the beautiful auto-deleting confirmation embed
       const { EmbedBuilder } = await import('discord.js');
-      const exchangeRate = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'exchange_rate'").get()?.value || '82.00');
+      const exchangeRate = parseFloat(db.getConfig('exchange_rate', '82.00'));
       
-      // We know tx contains the new balance_after. Convert to USD as well.
       const currentBalanceInr = tx.balance_after;
       const currentBalanceUsd = currentBalanceInr / exchangeRate;
 
@@ -54,7 +51,6 @@ ${formatUSD(currentBalanceUsd)}
       
       setTimeout(() => reply.delete().catch(() => {}), 8000);
 
-      // Trigger Dashboard & Audit Log updates
       const previousBalanceInr = currentBalanceInr - tx.converted_inr;
       await NotificationService.dispatchAuditLog('ADDED', tx, previousBalanceInr);
       await NotificationService.refreshDashboard();

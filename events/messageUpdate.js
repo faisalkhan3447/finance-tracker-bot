@@ -1,6 +1,6 @@
 import { Events } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { parseTransactionMessage, formatINR, formatUSD } from '../utils/currency.js';
+import { parseTransactionMessage } from '../utils/currency.js';
 import TransactionService from '../services/TransactionService.js';
 import NotificationService from '../services/NotificationService.js';
 import db from '../database/db.js';
@@ -10,11 +10,9 @@ export default {
   async execute(oldMessage, newMessage) {
     if (newMessage.author?.bot || !newMessage.guild) return;
 
-    // Check if this is the transaction channel
-    const txChannelId = db.prepare("SELECT value FROM configuration WHERE key = 'transaction_channel'").get()?.value;
+    const txChannelId = db.getConfig('transaction_channel');
     if (!txChannelId || newMessage.channel.id !== txChannelId) return;
 
-    // Fetch full message if partial (it's possible if the bot restarted)
     if (newMessage.partial) {
       try {
         await newMessage.fetch();
@@ -26,23 +24,20 @@ export default {
 
     const newParsed = parseTransactionMessage(newMessage.content);
     
-    // Check if the old message was previously processed as a transaction
-    const existingTx = db.prepare('SELECT * FROM transactions WHERE message_id = ? AND is_deleted = 0').get(newMessage.id);
+    const existingTx = db.data.transactions.find(t => t.message_id === newMessage.id && t.is_deleted === 0);
 
     try {
       if (existingTx) {
         if (!newParsed) {
-          // Changed from valid -> invalid. We should reverse the old transaction.
           logger.info(`Message ${newMessage.id} changed from valid to invalid. Reversing transaction.`);
-          const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+          const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
           const deletedTx = await TransactionService.deleteTransaction(newMessage.id, 'message_id');
           await NotificationService.dispatchAuditLog('DELETED', deletedTx, oldBalance);
           await NotificationService.refreshDashboard();
           return;
         }
 
-        // It was valid and is still valid. Let's update it.
-        const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+        const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
         const updatedTx = await TransactionService.updateTransaction(newMessage.id, {
           type: newParsed.type,
           originalAmount: newParsed.amount,
@@ -54,9 +49,8 @@ export default {
         await NotificationService.refreshDashboard();
       } else {
         if (newParsed) {
-          // Changed from invalid -> valid. Create new transaction.
           logger.info(`Message ${newMessage.id} changed from invalid to valid. Creating transaction.`);
-          const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+          const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
           const newTx = await TransactionService.createTransaction({
             messageId: newMessage.id,
             userId: newMessage.author.id,
