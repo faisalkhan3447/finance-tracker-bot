@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, ChannelType, ComponentType, RoleSelectMenuBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, ChannelSelectMenuBuilder, ChannelType, ComponentType, RoleSelectMenuBuilder, EmbedBuilder } from 'discord.js';
 import db from '../database/db.js';
 import { logger } from '../utils/logger.js';
 import NotificationService from '../services/NotificationService.js';
@@ -7,7 +7,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('setup')
     .setDescription('Interactive setup for the Finance Tracker bot')
-    .setDefaultMemberPermissions(8), // Administrator only
+    .setDefaultMemberPermissions(8),
     
   async execute(interaction) {
     try {
@@ -52,18 +52,16 @@ export default {
       collector.on('collect', async i => {
         selectedChannels = i.values;
 
-        // Save to DB
-        db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('transaction_channel', selectedChannels[0]);
-        db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('balance_channel', selectedChannels[1]);
-        db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('audit_channel', selectedChannels[2]);
-        db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('allowed_roles', JSON.stringify(selectedRoles));
+        db.setConfig('transaction_channel', selectedChannels[0]);
+        db.setConfig('balance_channel', selectedChannels[1]);
+        db.setConfig('audit_channel', selectedChannels[2]);
+        db.setConfig('allowed_roles', JSON.stringify(selectedRoles));
         
         await i.reply({ 
           content: `✅ Setup complete!\nTransactions: <#${selectedChannels[0]}>\nDashboard: <#${selectedChannels[1]}>\nAudit: <#${selectedChannels[2]}>`,
           ephemeral: true 
         });
 
-        // Trigger an initial refresh to create the dashboard
         await NotificationService.refreshDashboard();
       });
 

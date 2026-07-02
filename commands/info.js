@@ -12,15 +12,15 @@ export default {
         
   async execute(interaction) {
     try {
-      const dbPath = path.join(process.cwd(), 'database', 'finance.sqlite');
+      const dbPath = path.join(process.cwd(), 'database', 'data.json');
       let dbSizeStr = 'Unknown';
       if (fs.existsSync(dbPath)) {
         const stats = fs.statSync(dbPath);
         dbSizeStr = (stats.size / 1024 / 1024).toFixed(2) + ' MB';
       }
 
-      const txCount = db.prepare('SELECT COUNT(*) as count FROM transactions').get().count;
-      const deletedCount = db.prepare('SELECT COUNT(*) as count FROM transactions WHERE is_deleted = 1').get().count;
+      const txCount = db.data.transactions.length;
+      const deletedCount = db.data.transactions.filter(t => t.is_deleted === 1).length;
       
       const uptime = process.uptime();
       const uptimeStr = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`;

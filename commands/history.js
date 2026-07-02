@@ -17,7 +17,10 @@ export default {
     try {
       const limit = interaction.options.getInteger('limit') || 10;
       
-      const transactions = db.prepare('SELECT * FROM transactions WHERE is_deleted = 0 ORDER BY id DESC LIMIT ?').all(limit);
+      const transactions = db.data.transactions
+        .filter(t => t.is_deleted === 0)
+        .sort((a, b) => b.id - a.id)
+        .slice(0, limit);
       
       if (transactions.length === 0) {
         return interaction.reply({ content: 'No transactions found.', ephemeral: true });

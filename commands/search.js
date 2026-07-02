@@ -17,40 +17,30 @@ export default {
       await interaction.deferReply({ ephemeral: true });
       const query = interaction.options.getString('query').trim().toLowerCase();
       
-      let sql = 'SELECT * FROM transactions WHERE is_deleted = 0';
-      const params = [];
+      let results = db.data.transactions.filter(t => t.is_deleted === 0);
 
-      // A simple parser for search queries
       if (query.startsWith('amount>')) {
         const val = parseFloat(query.split('>')[1]);
-        sql += ' AND original_amount > ?';
-        params.push(val);
+        results = results.filter(t => t.original_amount > val);
       } else if (query.startsWith('amount<')) {
         const val = parseFloat(query.split('<')[1]);
-        sql += ' AND original_amount < ?';
-        params.push(val);
+        results = results.filter(t => t.original_amount < val);
       } else if (query.startsWith('reason:')) {
         const val = query.split(':')[1];
-        sql += ' AND LOWER(reason) LIKE ?';
-        params.push(`%${val}%`);
+        results = results.filter(t => t.reason.toLowerCase().includes(val));
       } else if (query.startsWith('txid:')) {
         const val = query.split(':')[1].toUpperCase();
-        sql += ' AND tx_id = ?';
-        params.push(val);
+        results = results.filter(t => t.tx_id === val);
       } else if (query === 'today') {
         const startOfDay = new Date();
         startOfDay.setHours(0,0,0,0);
-        sql += ' AND timestamp >= ?';
-        params.push(startOfDay.getTime());
+        const start = startOfDay.getTime();
+        results = results.filter(t => t.timestamp >= start);
       } else {
-        // Default to reason fuzzy search
-        sql += ' AND LOWER(reason) LIKE ?';
-        params.push(`%${query}%`);
+        results = results.filter(t => t.reason.toLowerCase().includes(query));
       }
 
-      sql += ' ORDER BY id DESC LIMIT 15';
-
-      const results = db.prepare(sql).all(...params);
+      results = results.sort((a, b) => b.id - a.id).slice(0, 15);
       
       if (results.length === 0) {
         return interaction.editReply('No transactions found matching your query.');

@@ -10,8 +10,8 @@ export default {
     
   async execute(interaction) {
     try {
-      const exchangeRate = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'exchange_rate'").get()?.value || '82.00');
-      const balanceInr = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+      const exchangeRate = parseFloat(db.getConfig('exchange_rate', '82.00'));
+      const balanceInr = parseFloat(db.getConfig('balance_inr', '0'));
       const balanceUsd = balanceInr / exchangeRate;
 
       const embed = new EmbedBuilder()

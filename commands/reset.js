@@ -23,10 +23,9 @@ export default {
 
       await interaction.deferReply({ ephemeral: true });
 
-      db.transaction(() => {
-        db.prepare('DELETE FROM transactions').run();
-        db.prepare("UPDATE configuration SET value = '0' WHERE key = 'balance_inr'").run();
-      })();
+      db.data.transactions = [];
+      db.setConfig('balance_inr', '0');
+      db.save();
 
       await NotificationService.refreshDashboard();
 

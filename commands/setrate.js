@@ -23,7 +23,7 @@ export default {
         return interaction.editReply('❌ Rate must be greater than zero.');
       }
 
-      db.prepare('INSERT OR REPLACE INTO configuration (key, value) VALUES (?, ?)').run('exchange_rate', String(rate));
+      db.setConfig('exchange_rate', String(rate));
       
       await NotificationService.refreshDashboard();
       

@@ -10,7 +10,7 @@ export default {
     
   async execute(interaction) {
     try {
-      const getCfg = (key, def) => db.prepare("SELECT value FROM configuration WHERE key = ?").get(key)?.value || def;
+      const getCfg = (key, def) => db.getConfig(key, def);
 
       const txChannel = getCfg('transaction_channel', 'Not Set');
       const balChannel = getCfg('balance_channel', 'Not Set');

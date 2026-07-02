@@ -2,7 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import db from '../database/db.js';
 import { formatINR, formatUSD } from '../utils/currency.js';
 import { logger } from '../utils/logger.js';
-import { writeToString } from 'csv-writer/src/lib/csv-stringifier-factory.js'; // Note: standard csv-writer uses createObjectCsvStringifier which might be easier. Wait, writing a custom CSV generator is safer here to avoid adding more deps unless necessary. We can just build the CSV string manually for simplicity.
+import { writeToString } from 'csv-writer/src/lib/csv-stringifier-factory.js'; 
 
 export default {
   data: new SlashCommandBuilder()
@@ -23,7 +23,7 @@ export default {
       await interaction.deferReply({ ephemeral: true });
       const format = interaction.options.getString('format');
       
-      const transactions = db.prepare('SELECT * FROM transactions ORDER BY id ASC').all();
+      const transactions = db.data.transactions;
       
       let fileContent = '';
       let fileExtension = format;
@@ -31,7 +31,6 @@ export default {
       if (format === 'json') {
         fileContent = JSON.stringify(transactions, null, 2);
       } else {
-        // Build CSV manually
         const headers = ['ID', 'TX ID', 'Message ID', 'User ID', 'Username', 'Type', 'Original Amount', 'Original Currency', 'Converted INR', 'Balance After', 'Reason', 'Is Deleted', 'Timestamp'];
         const escapeCsv = (str) => {
           if (str === null || str === undefined) return '';

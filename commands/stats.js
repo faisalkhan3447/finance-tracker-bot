@@ -20,23 +20,20 @@ export default {
     try {
       const period = interaction.options.getString('period') || 'all';
       
-      let sql = 'SELECT * FROM transactions WHERE is_deleted = 0';
-      const params = [];
+      let transactions = db.data.transactions.filter(t => t.is_deleted === 0);
       
       if (period === 'month') {
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0,0,0,0);
-        sql += ' AND timestamp >= ?';
-        params.push(startOfMonth.getTime());
+        const start = startOfMonth.getTime();
+        transactions = transactions.filter(t => t.timestamp >= start);
       } else if (period === 'today') {
         const startOfDay = new Date();
         startOfDay.setHours(0,0,0,0);
-        sql += ' AND timestamp >= ?';
-        params.push(startOfDay.getTime());
+        const start = startOfDay.getTime();
+        transactions = transactions.filter(t => t.timestamp >= start);
       }
-
-      const transactions = db.prepare(sql).all(...params);
       
       let totalIncome = 0;
       let totalExpense = 0;

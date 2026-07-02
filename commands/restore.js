@@ -18,7 +18,7 @@ export default {
     try {
       await interaction.deferReply({ ephemeral: true });
       const target = interaction.options.getString('txid').trim().toUpperCase();
-      const oldBalance = parseFloat(db.prepare("SELECT value FROM configuration WHERE key = 'balance_inr'").get()?.value || '0');
+      const oldBalance = parseFloat(db.getConfig('balance_inr', '0'));
       
       const restoredTx = await TransactionService.restoreTransaction(target);
 
