@@ -11,6 +11,7 @@ export default {
     if (interaction.isChatInputCommand()) {
       const command = interaction.client.commands.get(interaction.commandName);
       if (!command) { logger.error(`No command matching ${interaction.commandName} was found.`); return; }
+      
       const allowedRolesStr = db.getConfig('allowed_roles');
       if (allowedRolesStr) {
         try {
@@ -23,6 +24,7 @@ export default {
           }
         } catch (e) { logger.error('Error parsing allowed roles:', e); }
       }
+      
       try { await command.execute(interaction); } catch (error) {
         logger.error(`Error executing ${interaction.commandName}:`, error);
         const method = interaction.replied || interaction.deferred ? 'followUp' : 'reply';
@@ -31,6 +33,7 @@ export default {
     } else if (interaction.isButton()) {
       const [action, ...txIdParts] = interaction.customId.split('_');
       const txId = txIdParts.join('_');
+      
       if (action === 'undo') {
         try {
           await interaction.deferReply({ ephemeral: true });
@@ -55,17 +58,25 @@ export default {
           logger.error(`Failed to restore tx ${txId}:`, error);
           await interaction.editReply(`❌ Failed to restore: ${error.message}`);
         }
-      } else if (action === 'view') {
-         const tx = db.data.transactions.find(t => t.tx_id === txId);
-         if (!tx) return interaction.reply({ content: 'Transaction not found.', ephemeral: true });
-         await interaction.reply({ content: `**Transaction ${tx.tx_id}**\nType: ${tx.type}\nAmount: $${tx.amount}\nReason: ${tx.reason}\nLogged: <t:${Math.floor(tx.timestamp / 1000)}:f>`, ephemeral: true });
       } else if (action === 'pdf') {
          try {
            await interaction.deferReply({ ephemeral: true });
            const tx = db.data.transactions.find(t => t.tx_id === txId);
            if (!tx) return interaction.editReply('Transaction not found.');
+           
            const pdfBuffer = await generatePDFReceipt(tx);
            const attachment = new AttachmentBuilder(pdfBuffer, { name: `receipt_${tx.tx_id}.pdf` });
+           
+           const invoiceChannelId = db.getConfig('invoice_channel');
+           if (invoiceChannelId) {
+             const channel = await interaction.client.channels.fetch(invoiceChannelId).catch(() => null);
+             if (channel) {
+               await channel.send({ content: `🧾 Invoice generated for **${tx.tx_id}** by <@${interaction.user.id}>`, files: [attachment] });
+               await interaction.editReply({ content: `✅ Invoice successfully sent to <#${invoiceChannelId}>!` });
+               return;
+             }
+           }
+           
            await interaction.editReply({ content: `Here is your receipt for **${tx.tx_id}**:`, files: [attachment] });
          } catch (error) {
            logger.error(`Failed to generate PDF for ${txId}:`, error);
