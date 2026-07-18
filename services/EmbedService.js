@@ -15,22 +15,8 @@ class EmbedService {
     const last30 = transactions.filter(t => t.is_deleted === 0).sort((a, b) => a.timestamp - b.timestamp).slice(-30);
     if (last30.length < 2) return null;
     const data = last30.map(t => t.balance_after);
-    const config = {
-      type: 'line',
-      data: { 
-        labels: last30.map((_, i) => i + 1), 
-        datasets: [{ data, borderColor: '#5865F2', fill: true, backgroundColor: 'rgba(88, 101, 242, 0.1)', borderWidth: 2 }] 
-      },
-      options: {
-        legend: { display: false },
-        scales: {
-          xAxes: [{ display: false }],
-          yAxes: [{ display: true, ticks: { fontColor: '#fff', fontSize: 10 } }]
-        },
-        elements: { point: { radius: 0 } }
-      }
-    };
-    return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(config))}&bkg=transparent&w=400&h=150`;
+    const config = { type: 'sparkline', data: { datasets: [{ data, borderColor: '#5865F2', fill: true, backgroundColor: 'rgba(88, 101, 242, 0.1)', borderWidth: 2 }] }, options: { legend: { display: false }, elements: { point: { radius: 0 } } } };
+    return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(config))}&bkg=transparent&w=300&h=100`;
   }
 
   generateDashboardEmbed() {
@@ -43,15 +29,22 @@ class EmbedService {
     const startOfPastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
     const endOfPastMonth = startOfCurrentMonth - 1;
 
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0); const startOfDayTs = startOfDay.getTime();
+    
+    let todayIncome = 0; let todayExpense = 0;
     let currentMonthIncome = 0; let currentMonthExpense = 0;
     let pastMonthIncome = 0; let pastMonthExpense = 0;
     let txCount = 0; let lastTx = null;
 
     for (const tx of db.data.transactions) {
       if (tx.is_deleted === 0) {
-        txCount++; 
-        lastTx = tx; 
+        txCount++; lastTx = tx; 
         
+        if (tx.timestamp >= startOfDayTs) { 
+          if (tx.type === 'INCOME') todayIncome += tx.amount; 
+          else todayExpense += tx.amount; 
+        }
+
         if (tx.timestamp >= startOfCurrentMonth) {
           if (tx.type === 'INCOME') currentMonthIncome += tx.amount;
           else currentMonthExpense += tx.amount;
@@ -85,8 +78,11 @@ class EmbedService {
         { name: '💵 Current Balance', value: `\`\`\`diff\n${balance >= 0 ? '+' : '-'}${formatUSD(Math.abs(balance))}\n\`\`\``, inline: true },
         { name: '🎯 Monthly Income Goal', value: goalDisplay, inline: true },
         { name: '\u200b', value: '\u200b', inline: false },
-        { name: '📅 Current Month', value: `Income: **${formatUSD(currentMonthIncome)}**\nSpend: **${formatUSD(currentMonthExpense)}**\nNet: **${formatUSD(currentNet)}**`, inline: true },
-        { name: '⏪ Past Month', value: `Income: **${formatUSD(pastMonthIncome)}**\nSpend: **${formatUSD(pastMonthExpense)}**\nNet: **${formatUSD(pastNet)}**`, inline: true },
+        { name: '🟩 Today\'s Income', value: `**${formatUSD(todayIncome)}**`, inline: true },
+        { name: '🟥 Today\'s Expenses', value: `**${formatUSD(todayExpense)}**`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: false },
+        { name: '📅 Current Month (Net)', value: `**${formatUSD(currentNet)}**`, inline: true },
+        { name: '⏪ Past Month (Net)', value: `**${formatUSD(pastNet)}**`, inline: true },
         { name: '\u200b', value: '\u200b', inline: false },
         { name: '🕒 Latest Activity', value: lastTxString, inline: false }
       )
