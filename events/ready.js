@@ -1,4 +1,4 @@
-import { Events } from 'discord.js';
+import { Events, ActivityType } from 'discord.js';
 import { logger } from '../utils/logger.js';
 import db from '../database/db.js';
 
@@ -8,19 +8,22 @@ export default {
   async execute(client) {
     logger.info(`Ready! Logged in as ${client.user.tag}`);
     
-    setInterval(async () => {
-      try {
-        const txCount = db.data.transactions.filter(t => t.is_deleted === 0).length;
-        const balance = parseFloat(db.getConfig('balance_inr', '0'));
-        
-        const { formatINR } = await import('../utils/currency.js');
-        
-        client.user.setActivity(`Watching ${formatINR(balance)} | ${txCount} Txns`);
-      } catch (error) {
-        logger.error('Error updating presence:', error);
-      }
-    }, 60000);
+    const NotificationService = (await import('../services/NotificationService.js')).default;
+    NotificationService.setClient(client);
 
-    client.emit('updatePresence'); 
+    const updateStatus = async () => {
+      try {
+        const balance = parseFloat(db.getConfig('balance', '0'));
+        const txCount = db.data.transactions.filter(t => t.is_deleted === 0).length;
+        const { formatUSD } = await import('../utils/currency.js');
+        
+        client.user.setActivity(`Watching ${formatUSD(balance)} | ${txCount} Txns`, { type: ActivityType.Custom });
+      } catch (err) {
+        logger.error('Failed to update status:', err);
+      }
+    };
+
+    await updateStatus();
+    setInterval(updateStatus, 5 * 60 * 1000); 
   }
 };
