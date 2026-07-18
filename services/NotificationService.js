@@ -15,20 +15,20 @@ class NotificationService {
       const channel = await this.client.channels.fetch(channelId).catch(() => null);
       if (!channel || !(channel instanceof TextChannel)) return;
 
-      const embed = EmbedService.generateDashboardEmbed();
+      const messagePayload = EmbedService.generateDashboardMessage();
       const existingMessageId = db.getConfig('balance_message_id');
       let messageUpdated = false;
 
       if (existingMessageId) {
         try {
           const existingMessage = await channel.messages.fetch(existingMessageId);
-          await existingMessage.edit({ embeds: [embed] });
+          await existingMessage.edit(messagePayload);
           messageUpdated = true;
         } catch (error) { logger.warn(`Could not edit dashboard message. Creating new one.`); }
       }
 
       if (!messageUpdated) {
-        const newMessage = await channel.send({ embeds: [embed] });
+        const newMessage = await channel.send(messagePayload);
         db.setConfig('balance_message_id', newMessage.id);
       }
     } catch (error) { logger.error('Failed to refresh dashboard:', error); }

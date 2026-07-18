@@ -1,8 +1,10 @@
-import { Events, AttachmentBuilder, EmbedBuilder } from 'discord.js';
-import db from '../database/db.js';
+import { Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { logger } from '../utils/logger.js';
+import { parseTransactionMessage, formatUSD } from '../utils/currency.js';
 import TransactionService from '../services/TransactionService.js';
 import NotificationService from '../services/NotificationService.js';
+import db from '../database/db.js';
+import EmbedService from '../services/EmbedService.js';
 import { generatePDFReceipt } from '../utils/pdf.js';
 
 export default {
@@ -31,6 +33,16 @@ export default {
         await interaction[method]({ content: 'There was an error while executing this command!', ephemeral: true });
       }
     } else if (interaction.isButton()) {
+      
+      if (interaction.customId === 'stats_current_month') {
+        const embed = EmbedService.generateMonthStatsEmbed(0);
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+      if (interaction.customId === 'stats_past_month') {
+        const embed = EmbedService.generateMonthStatsEmbed(1);
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+
       const [action, ...txIdParts] = interaction.customId.split('_');
       const txId = txIdParts.join('_');
       

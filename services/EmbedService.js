@@ -19,38 +19,26 @@ class EmbedService {
     return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(config))}&bkg=transparent&w=300&h=100`;
   }
 
-  generateDashboardEmbed() {
+  generateDashboardMessage() {
     const balance = parseFloat(db.getConfig('balance', '0'));
     const goalTarget = parseFloat(db.getConfig('goal', '0'));
     
     const now = new Date();
-    
-    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const startOfPastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-    const endOfPastMonth = startOfCurrentMonth - 1;
-
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0); const startOfDayTs = startOfDay.getTime();
     
-    let todayIncome = 0; let todayExpense = 0;
-    let currentMonthIncome = 0; let currentMonthExpense = 0;
-    let pastMonthIncome = 0; let pastMonthExpense = 0;
+    let todayIncome = 0; let todayExpense = 0; let currentMonthIncome = 0;
     let txCount = 0; let lastTx = null;
 
     for (const tx of db.data.transactions) {
       if (tx.is_deleted === 0) {
         txCount++; lastTx = tx; 
-        
         if (tx.timestamp >= startOfDayTs) { 
           if (tx.type === 'INCOME') todayIncome += tx.amount; 
           else todayExpense += tx.amount; 
         }
-
-        if (tx.timestamp >= startOfCurrentMonth) {
+        if (tx.timestamp >= startOfMonth) {
           if (tx.type === 'INCOME') currentMonthIncome += tx.amount;
-          else currentMonthExpense += tx.amount;
-        } else if (tx.timestamp >= startOfPastMonth && tx.timestamp <= endOfPastMonth) {
-          if (tx.type === 'INCOME') pastMonthIncome += tx.amount;
-          else pastMonthExpense += tx.amount;
         }
       }
     }
@@ -67,9 +55,6 @@ class EmbedService {
       goalDisplay = `${formatUSD(currentMonthIncome)} / ${formatUSD(goalTarget)}\n${progressBar}`;
     }
 
-    const currentNet = currentMonthIncome - currentMonthExpense;
-    const pastNet = pastMonthIncome - pastMonthExpense;
-
     const embed = new EmbedBuilder()
       .setColor('#2b2d31')
       .setTitle('🏦 Financial Overview')
@@ -81,9 +66,6 @@ class EmbedService {
         { name: '🟩 Today\'s Income', value: `**${formatUSD(todayIncome)}**`, inline: true },
         { name: '🟥 Today\'s Expenses', value: `**${formatUSD(todayExpense)}**`, inline: true },
         { name: '\u200b', value: '\u200b', inline: false },
-        { name: '📅 Current Month (Net)', value: `**${formatUSD(currentNet)}**`, inline: true },
-        { name: '⏪ Past Month (Net)', value: `**${formatUSD(pastNet)}**`, inline: true },
-        { name: '\u200b', value: '\u200b', inline: false },
         { name: '🕒 Latest Activity', value: lastTxString, inline: false }
       )
       .setFooter({ text: `Finance Bot v2.0 | Total TX: ${txCount}` })
@@ -92,6 +74,51 @@ class EmbedService {
     const chartUrl = this._generateSparklineUrl(db.data.transactions);
     if (chartUrl) embed.setImage(chartUrl);
     
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('stats_current_month').setLabel('📅 Current Month').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('stats_past_month').setLabel('⏪ Last Month').setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [row] };
+  }
+
+  generateMonthStatsEmbed(monthOffset = 0) {
+    const goalTarget = parseFloat(db.getConfig('goal', '0'));
+    const now = new Date();
+    
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - monthOffset, 1);
+    const startTs = startOfMonth.getTime();
+    
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() - monthOffset + 1, 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+    const endTs = endOfMonth.getTime();
+
+    let income = 0; let expense = 0;
+    for (const tx of db.data.transactions) {
+      if (tx.is_deleted === 0 && tx.timestamp >= startTs && tx.timestamp <= endTs) {
+        if (tx.type === 'INCOME') income += tx.amount;
+        else expense += tx.amount;
+      }
+    }
+
+    const monthName = startOfMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+    let percentStr = '';
+    if (goalTarget > 0) {
+      const p = ((income / goalTarget) * 100).toFixed(1);
+      percentStr = `\n**Goal Completed:** ${p}%`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(`📊 Monthly Statistics: ${monthName}`)
+      .setDescription(`Detailed breakdown of your finances for ${monthName}.`)
+      .addFields(
+        { name: '🟩 Total Income', value: `**${formatUSD(income)}**`, inline: true },
+        { name: '🟥 Total Spend', value: `**${formatUSD(expense)}**`, inline: true },
+        { name: '💰 Net Profit', value: `**${formatUSD(income - expense)}**${percentStr}`, inline: false }
+      )
+      .setTimestamp();
+      
     return embed;
   }
 
