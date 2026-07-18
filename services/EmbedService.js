@@ -161,6 +161,7 @@ class EmbedService {
       .addFields(
         { name: 'Current Progress', value: `${formatUSD(monthIncome)} / ${formatUSD(goalTarget)}\n${progressBar}`, inline: false }
       )
+      .setImage('https://media.giphy.com/media/3oz8xAFtjouK9HOFyw/giphy.gif')
       .setTimestamp();
   }
 
