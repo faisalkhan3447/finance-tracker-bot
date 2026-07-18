@@ -4,51 +4,57 @@ import { parseTransactionMessage, formatUSD } from '../utils/currency.js';
 import TransactionService from '../services/TransactionService.js';
 import NotificationService from '../services/NotificationService.js';
 import db from '../database/db.js';
+import EmbedService from '../services/EmbedService.js';
 
 export default {
   name: Events.MessageCreate,
   async execute(message) {
     if (message.author.bot || !message.guild) return;
+
     const txChannelId = db.getConfig('transaction_channel');
     if (!txChannelId || message.channel.id !== txChannelId) return;
 
     const parsed = parseTransactionMessage(message.content);
     if (!parsed) return; 
 
-    await message.delete().catch(() => {});
+    const deleted = await message.delete().catch(err => {
+      logger.warn(`Failed to delete message: ${err.message}. Ensure bot has Manage Messages permission.`);
+      return false;
+    });
 
     try {
-      const tx = await TransactionService.createTransaction({ messageId: message.id, userId: message.author.id, username: message.author.username, type: parsed.type, amount: parsed.amount, reason: parsed.reason });
+      const tx = await TransactionService.createTransaction({
+        messageId: message.id, 
+        userId: message.author.id,
+        username: message.author.username,
+        type: parsed.type,
+        amount: parsed.amount,
+        reason: parsed.reason
+      });
+
       const currentBalance = tx.balance_after;
-
-      const embed = new EmbedBuilder().setColor(tx.type === 'INCOME' ? '#00FF00' : '#FF0000').setTitle(`🧾 Transaction Receipt: ${tx.tx_id}`)
-        .addFields(
-          { name: 'Type', value: tx.type === 'INCOME' ? '🟢 INCOME' : '🔴 EXPENSE', inline: true },
-          { name: 'Amount', value: `**${tx.type === 'INCOME' ? '+' : '-'}${formatUSD(parsed.amount)}**`, inline: true },
-          { name: 'New Balance', value: `**${formatUSD(currentBalance)}**`, inline: true },
-          { name: 'Reason', value: tx.reason, inline: false },
-          { name: 'Logged By', value: `<@${message.author.id}>`, inline: true }
-        ).setFooter({ text: 'Finance Tracker Bot' }).setTimestamp();
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`undo_${tx.tx_id}`).setLabel('Undo').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`pdf_${tx.tx_id}`).setLabel('📄 Download PDF').setStyle(ButtonStyle.Primary)
-      );
+      const previousBalance = currentBalance - (tx.type === 'INCOME' ? tx.amount : -tx.amount);
+      
+      const { embeds, components } = EmbedService.generateAuditLog('ADDED', tx, previousBalance);
 
       const logChannelId = db.getConfig('transactionlog_channel');
       if (logChannelId) {
         const logChannel = await message.client.channels.fetch(logChannelId).catch(() => null);
         if (logChannel) {
-          await logChannel.send({ embeds: [embed], components: [row] });
+          await logChannel.send({ embeds, components });
         } else {
-          await message.channel.send({ embeds: [embed], components: [row] });
+          await message.channel.send({ embeds, components });
         }
       } else {
-        await message.channel.send({ embeds: [embed], components: [row] });
+        await message.channel.send({ embeds, components });
+      }
+      
+      if (deleted === false) {
+        const warnEmbed = new EmbedBuilder().setColor('#FEE75C').setDescription('⚠️ Please give the bot **Manage Messages** permission in this channel to auto-delete your transaction logs!');
+        const wMsg = await message.channel.send({ embeds: [warnEmbed] });
+        setTimeout(() => wMsg.delete().catch(()=>null), 10000);
       }
 
-      const previousBalance = currentBalance - (tx.type === 'INCOME' ? tx.amount : -tx.amount);
-      await NotificationService.dispatchAuditLog('ADDED', tx, previousBalance);
       await NotificationService.refreshDashboard();
 
     } catch (error) {
