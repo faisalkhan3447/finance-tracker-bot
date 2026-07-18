@@ -5,19 +5,11 @@ import { logger } from '../utils/logger.js';
 const DB_PATH = path.join(process.cwd(), 'database', 'data.json');
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
 
-if (!fs.existsSync(path.dirname(DB_PATH))) {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-}
-if (!fs.existsSync(BACKUP_DIR)) {
-  fs.mkdirSync(BACKUP_DIR, { recursive: true });
-}
+if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
 const defaultData = {
-  configuration: {
-    exchange_rate: '82.00',
-    balance_inr: '0',
-    allow_negative_balance: 'false'
-  },
+  configuration: { balance: '0', allow_negative_balance: 'false', budget: '0' },
   transactions: []
 };
 
@@ -34,6 +26,12 @@ class JSONDatabase {
         this.data = JSON.parse(fileContent);
         if (!this.data.configuration) this.data.configuration = defaultData.configuration;
         if (!this.data.transactions) this.data.transactions = [];
+        
+        if (this.data.configuration.balance_inr !== undefined) {
+           this.data.configuration.balance = this.data.configuration.balance_inr;
+           delete this.data.configuration.balance_inr;
+           delete this.data.configuration.exchange_rate;
+        }
       } else {
         this.save();
       }
@@ -45,11 +43,7 @@ class JSONDatabase {
   }
 
   save() {
-    try {
-      fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf-8');
-    } catch (error) {
-      logger.error('Failed to save JSON database:', error);
-    }
+    try { fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2), 'utf-8'); } catch (error) { logger.error('Failed to save JSON database:', error); }
   }
 
   getConfig(key, defaultValue) {
@@ -63,7 +57,6 @@ class JSONDatabase {
 }
 
 const db = new JSONDatabase();
-
 export const executeTransaction = (cb) => {
   try {
     const result = cb();

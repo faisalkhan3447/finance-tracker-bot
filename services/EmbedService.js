@@ -1,124 +1,71 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import db from '../database/db.js';
-import { formatINR, formatUSD } from '../utils/currency.js';
+import { formatUSD } from '../utils/currency.js';
 
 class EmbedService {
+  _renderProgressBar(value, max, length = 15) {
+    if (max <= 0) return '';
+    const percent = Math.min(100, Math.max(0, (value / max) * 100));
+    const filledLength = Math.round((length * percent) / 100);
+    const emptyLength = length - filledLength;
+    return `\`[${'█'.repeat(filledLength)}${'░'.repeat(emptyLength)}]\` **${percent.toFixed(1)}%**`;
+  }
+  _generateSparklineUrl(transactions) {
+    const last30 = transactions.filter(t => t.is_deleted === 0).sort((a, b) => a.timestamp - b.timestamp).slice(-30);
+    if (last30.length < 2) return null;
+    const data = last30.map(t => t.balance_after);
+    const config = { type: 'sparkline', data: { datasets: [{ data, borderColor: '#5865F2', fill: true, backgroundColor: 'rgba(88, 101, 242, 0.1)', borderWidth: 2 }] }, options: { legend: { display: false }, elements: { point: { radius: 0 } } } };
+    return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(config))}&bkg=transparent&w=300&h=100`;
+  }
   generateDashboardEmbed() {
-    const exchangeRate = parseFloat(db.getConfig('exchange_rate', '82.00'));
-    const balanceInr = parseFloat(db.getConfig('balance_inr', '0'));
-    const balanceUsd = balanceInr / exchangeRate;
-    
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const startTimestamp = startOfDay.getTime();
-    
-    let todayIncome = 0;
-    let todayExpense = 0;
-    let txCount = 0;
-    let lastTx = null;
-
+    const balance = parseFloat(db.getConfig('balance', '0'));
+    const budgetLimit = parseFloat(db.getConfig('budget', '0'));
+    const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0); const startOfMonthTs = startOfMonth.getTime();
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0); const startOfDayTs = startOfDay.getTime();
+    let todayIncome = 0; let todayExpense = 0; let monthExpense = 0; let txCount = 0; let lastTx = null;
     for (const tx of db.data.transactions) {
       if (tx.is_deleted === 0) {
-        txCount++;
-        lastTx = tx; 
-        
-        if (tx.timestamp >= startTimestamp) {
-          if (tx.type === 'INCOME') todayIncome += tx.converted_inr;
-          else todayExpense += tx.converted_inr;
-        }
+        txCount++; lastTx = tx; 
+        if (tx.timestamp >= startOfDayTs) { if (tx.type === 'INCOME') todayIncome += tx.amount; else todayExpense += tx.amount; }
+        if (tx.timestamp >= startOfMonthTs && tx.type === 'EXPENSE') monthExpense += tx.amount;
       }
     }
-
     let lastTxString = 'No transactions yet.';
-    if (lastTx) {
-      const sign = lastTx.type === 'INCOME' ? '+' : '-';
-      const formattedAmount = lastTx.original_currency === 'USD' ? formatUSD(lastTx.original_amount) : formatINR(lastTx.original_amount);
-      lastTxString = `${sign}${formattedAmount} - ${lastTx.reason}`;
+    if (lastTx) { const sign = lastTx.type === 'INCOME' ? '+' : '-'; lastTxString = `${sign}${formatUSD(lastTx.amount)} - ${lastTx.reason}`; }
+    let budgetDisplay = 'No budget set. Use `/budget set`';
+    if (budgetLimit > 0) {
+      const progressBar = this._renderProgressBar(monthExpense, budgetLimit);
+      budgetDisplay = `${formatUSD(monthExpense)} / ${formatUSD(budgetLimit)}\n${progressBar}`;
     }
-
-    const embed = new EmbedBuilder()
-      .setColor('#5865F2')
-      .setTitle('💰 Finance Dashboard')
-      .setDescription('Live synchronized financial status.')
+    const embed = new EmbedBuilder().setColor('#5865F2').setTitle('💰 Finance Dashboard').setDescription('Live synchronized financial status.')
       .addFields(
-        { name: 'Current Balance (INR)', value: `**${formatINR(balanceInr)}**`, inline: true },
-        { name: 'Current Balance (USD)', value: `**${formatUSD(balanceUsd)}**`, inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { name: '📈 Today\'s Income', value: formatINR(todayIncome), inline: true },
-        { name: '📉 Today\'s Expenses', value: formatINR(todayExpense), inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { name: '💱 Exchange Rate', value: `$1 = ${formatINR(exchangeRate)}`, inline: true },
+        { name: 'Current Balance', value: `**${formatUSD(balance)}**`, inline: true }, { name: '\u200B', value: '\u200B', inline: true }, { name: 'Monthly Budget (Spent)', value: budgetDisplay, inline: true },
+        { name: '📈 Today\'s Income', value: formatUSD(todayIncome), inline: true }, { name: '\u200B', value: '\u200B', inline: true }, { name: '📉 Today\'s Expenses', value: formatUSD(todayExpense), inline: true },
         { name: '🕒 Last Transaction', value: lastTxString, inline: false }
-      )
-      .setFooter({ text: `v1.0.0 | ${txCount} Transactions` })
-      .setTimestamp(new Date());
-
+      ).setFooter({ text: `v2.0.0 | ${txCount} Transactions` }).setTimestamp(new Date());
+    const sparklineUrl = this._generateSparklineUrl(db.data.transactions);
+    if (sparklineUrl) embed.setImage(sparklineUrl);
     return embed;
   }
-
-  generateAuditLog(action, tx, previousBalanceInr) {
-    let color = '#5865F2'; 
-    let title = 'Transaction Audit';
-    
-    if (action === 'ADDED') {
-      color = tx.type === 'INCOME' ? '#00FF00' : '#FF0000';
-      title = `💰 Transaction Added`;
-    } else if (action === 'DELETED' || action === 'UNDONE') {
-      color = '#ED4245'; 
-      title = `🗑️ Transaction ${action === 'UNDONE' ? 'Undone' : 'Deleted'}`;
-    } else if (action === 'RESTORED') {
-      color = '#57F287'; 
-      title = `♻️ Transaction Restored`;
-    } else if (action === 'UPDATED') {
-      color = '#FEE75C'; 
-      title = `✏️ Transaction Updated`;
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setTitle(title)
+  generateAuditLog(action, tx, previousBalance) {
+    let color = '#5865F2'; let title = 'Transaction Audit';
+    if (action === 'ADDED') { color = tx.type === 'INCOME' ? '#00FF00' : '#FF0000'; title = `💰 Transaction Added`; } 
+    else if (action === 'DELETED' || action === 'UNDONE') { color = '#ED4245'; title = `🗑️ Transaction ${action === 'UNDONE' ? 'Undone' : 'Deleted'}`; } 
+    else if (action === 'RESTORED') { color = '#57F287'; title = `♻️ Transaction Restored`; } 
+    else if (action === 'UPDATED') { color = '#FEE75C'; title = `✏️ Transaction Updated`; }
+    const embed = new EmbedBuilder().setColor(color).setTitle(title)
       .addFields(
-        { name: 'Transaction ID', value: tx.tx_id, inline: true },
-        { name: 'User', value: `<@${tx.user_id}>`, inline: true },
-        { name: 'Type', value: tx.type, inline: true },
-        { name: 'Original Amount', value: tx.original_currency === 'USD' ? formatUSD(tx.original_amount) : formatINR(tx.original_amount), inline: true },
-        { name: 'Converted Amount', value: formatINR(tx.converted_inr), inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { name: 'Previous Balance', value: formatINR(previousBalanceInr), inline: true },
-        { name: 'New Balance', value: formatINR(tx.balance_after), inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
+        { name: 'Transaction ID', value: tx.tx_id, inline: true }, { name: 'User', value: `<@${tx.user_id}>`, inline: true }, { name: 'Type', value: tx.type, inline: true },
+        { name: 'Amount', value: formatUSD(tx.amount), inline: true }, { name: 'Previous Balance', value: formatUSD(previousBalance), inline: true }, { name: 'New Balance', value: formatUSD(tx.balance_after), inline: true },
         { name: 'Reason', value: tx.reason, inline: false }
-      )
-      .setTimestamp(tx.timestamp);
-
+      ).setTimestamp(tx.timestamp);
     const row = new ActionRowBuilder();
-    
     if (action === 'ADDED' || action === 'RESTORED' || action === 'UPDATED') {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`undo_${tx.tx_id}`)
-          .setLabel('Undo')
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`view_${tx.tx_id}`)
-          .setLabel('View details')
-          .setStyle(ButtonStyle.Secondary)
-      );
+      row.addComponents(new ButtonBuilder().setCustomId(`undo_${tx.tx_id}`).setLabel('Undo').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(`view_${tx.tx_id}`).setLabel('View details').setStyle(ButtonStyle.Secondary));
     } else if (action === 'DELETED' || action === 'UNDONE') {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`restore_${tx.tx_id}`)
-          .setLabel('Restore')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`view_${tx.tx_id}`)
-          .setLabel('View details')
-          .setStyle(ButtonStyle.Secondary)
-      );
+      row.addComponents(new ButtonBuilder().setCustomId(`restore_${tx.tx_id}`).setLabel('Restore').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`view_${tx.tx_id}`).setLabel('View details').setStyle(ButtonStyle.Secondary));
     }
-
     return { embeds: [embed], components: [row] };
   }
 }
-
 export default new EmbedService();

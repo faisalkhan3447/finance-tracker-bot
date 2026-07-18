@@ -4,13 +4,12 @@
   "description": "Discord Finance Tracker Bot",
   "main": "index.js",
   "type": "module",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "scripts": { "start": "node index.js" },
   "dependencies": {
     "async-mutex": "^0.5.0",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
+    "pdfkit": "^0.15.0",
     "winston": "^3.13.0"
   },
   "author": "",
