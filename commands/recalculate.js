@@ -6,20 +6,14 @@ import { logger } from '../utils/logger.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('recalculate')
-    .setDescription('Fully recalculates the running balance from transaction history')
+    .setDescription('Force recalculate all balances from the ground up')
     .setDefaultMemberPermissions(8),
-        
   async execute(interaction) {
     try {
       await interaction.deferReply({ ephemeral: true });
-      
       await TransactionService.recalculateEverything();
       await NotificationService.refreshDashboard();
-      
-      await interaction.editReply(`✅ Successfully recalculated all balances and fixed any historical desynchronizations.`);
-    } catch (error) {
-      logger.error('Error executing /recalculate:', error);
-      await interaction.editReply(`❌ Failed to recalculate: ${error.message}`);
-    }
+      await interaction.editReply('✅ Successfully recalculated all balances. Dashboard has been updated.');
+    } catch (error) { logger.error('Error executing /recalculate:', error); const method = interaction.deferred ? 'editReply' : 'reply'; await interaction[method](`Failed to recalculate balances: ${error.message}`); }
   }
 };
