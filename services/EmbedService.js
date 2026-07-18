@@ -21,16 +21,16 @@ class EmbedService {
 
   generateDashboardEmbed() {
     const balance = parseFloat(db.getConfig('balance', '0'));
-    const budgetLimit = parseFloat(db.getConfig('budget', '0'));
+    const goalTarget = parseFloat(db.getConfig('goal', '0'));
     const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0); const startOfMonthTs = startOfMonth.getTime();
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0); const startOfDayTs = startOfDay.getTime();
     
-    let todayIncome = 0; let todayExpense = 0; let monthExpense = 0; let txCount = 0; let lastTx = null;
+    let todayIncome = 0; let todayExpense = 0; let monthIncome = 0; let txCount = 0; let lastTx = null;
     for (const tx of db.data.transactions) {
       if (tx.is_deleted === 0) {
         txCount++; lastTx = tx; 
         if (tx.timestamp >= startOfDayTs) { if (tx.type === 'INCOME') todayIncome += tx.amount; else todayExpense += tx.amount; }
-        if (tx.timestamp >= startOfMonthTs && tx.type === 'EXPENSE') monthExpense += tx.amount;
+        if (tx.timestamp >= startOfMonthTs && tx.type === 'INCOME') monthIncome += tx.amount;
       }
     }
     
@@ -40,10 +40,10 @@ class EmbedService {
       lastTxString = `**${sign}${formatUSD(lastTx.amount)}** — ${lastTx.reason}`; 
     }
     
-    let budgetDisplay = '*Not configured. Use `/budget set`*';
-    if (budgetLimit > 0) {
-      const progressBar = this._renderProgressBar(monthExpense, budgetLimit);
-      budgetDisplay = `${formatUSD(monthExpense)} / ${formatUSD(budgetLimit)}\n${progressBar}`;
+    let goalDisplay = '*Not configured. Use `/goal set`*';
+    if (goalTarget > 0) {
+      const progressBar = this._renderProgressBar(monthIncome, goalTarget);
+      goalDisplay = `${formatUSD(monthIncome)} / ${formatUSD(goalTarget)}\n${progressBar}`;
     }
 
     const embed = new EmbedBuilder()
@@ -52,7 +52,7 @@ class EmbedService {
       .setDescription('*Live synchronized financial tracking.*')
       .addFields(
         { name: '💵 Current Balance', value: `\`\`\`diff\n${balance >= 0 ? '+' : '-'}${formatUSD(Math.abs(balance))}\n\`\`\``, inline: true },
-        { name: '📊 Monthly Spend Limit', value: budgetDisplay, inline: true },
+        { name: '🎯 Monthly Income Goal', value: goalDisplay, inline: true },
         { name: '\u200b', value: '\u200b', inline: false },
         { name: '🟩 Today\'s Income', value: `**${formatUSD(todayIncome)}**`, inline: true },
         { name: '🟥 Today\'s Expenses', value: `**${formatUSD(todayExpense)}**`, inline: true },
@@ -98,6 +98,32 @@ class EmbedService {
       );
     }
     return { embeds: [embed], components: [row] };
+  }
+
+  generateMilestoneAnnouncement(milestone, monthIncome, goalTarget) {
+    const progressBar = this._renderProgressBar(monthIncome, goalTarget);
+    return new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🏆 Goal Milestone Reached!')
+      .setDescription(`Congratulations! We just crossed **${milestone}0%** of our monthly income goal! 🎉`)
+      .addFields(
+        { name: 'Current Progress', value: `${formatUSD(monthIncome)} / ${formatUSD(goalTarget)}\n${progressBar}`, inline: false }
+      )
+      .setImage('https://i.imgur.com/8z3vQ8C.gif')
+      .setTimestamp();
+  }
+
+  generateHighValueAnnouncement(tx) {
+    return new EmbedBuilder()
+      .setColor('#57F287')
+      .setTitle('🚀 Massive Income Alert!')
+      .setDescription(`A high-value transaction was just logged!`)
+      .addFields(
+        { name: 'Amount', value: `**+${formatUSD(tx.amount)}**`, inline: true },
+        { name: 'Reason', value: `*${tx.reason}*`, inline: true },
+        { name: 'Logged By', value: `<@${tx.user_id}>`, inline: true }
+      )
+      .setTimestamp(tx.timestamp);
   }
 }
 

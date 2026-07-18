@@ -45,5 +45,16 @@ class NotificationService {
       await channel.send({ embeds, components });
     } catch (error) { logger.error(`Failed to dispatch audit log for TX ${tx?.tx_id}:`, error); }
   }
+
+  async dispatchAnnouncement(embed) {
+    if (!this.client) return;
+    try {
+      const channelId = db.getConfig('announcement_channel');
+      if (!channelId) return;
+      const channel = await this.client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !(channel instanceof TextChannel)) return;
+      await channel.send({ embeds: [embed] });
+    } catch (error) { logger.error('Failed to dispatch announcement:', error); }
+  }
 }
 export default new NotificationService();
